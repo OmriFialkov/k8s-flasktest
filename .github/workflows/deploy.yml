@@ -16,6 +16,7 @@ jobs:
 
       - name: set environment variables
         run: |
+          set -ex
           echo "IMAGE_TAG=0.0.${{ github.run_number }}" >> $GITHUB_ENV
           echo "checking image tag, is: ${{env.IMAGE_TAG}}"
 
@@ -23,10 +24,9 @@ jobs:
         run: |
           sed -i "s|image: crazyguy888/k8s-flasktest:.*|image: crazyguy888/k8s-flasktest:${{env.IMAGE_TAG}}|" deploy-k8s.yaml
 
-      - name: install sshpass
+      - name: verify sshpass installed
         run: |
-          sudo apt-get update
-          sudo apt-get install -y sshpass
+          sshpass -v || echo "sshpass is not installed"; exit 1
 
       - name: SCP yaml to remote machine using sshpass
         env:
