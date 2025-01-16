@@ -24,9 +24,10 @@ jobs:
         run: |
           sed -i "s|image: crazyguy888/k8s-flasktest:.*|image: crazyguy888/k8s-flasktest:${{env.IMAGE_TAG}}|" deploy-k8s.yaml
 
-      - name: verify sshpass installed
+      - name: verify sshpass and ssh installed
         run: |
-          sshpass -V || echo "sshpass is not installed"; exit 1
+          ssh -V || { echo "ssh is not installed"; exit 1; }
+          sshpass -V || { echo "sshpass is not installed"; exit 1; }
 
       - name: SCP yaml to remote machine using sshpass
         env:
