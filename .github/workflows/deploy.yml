@@ -35,7 +35,8 @@ jobs:
           SSH_USER: ${{ secrets.SSH_USER }}
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
         run: | 
-          sshpass -p $SSH_PASSWORD scp -o StrictHostKeyChecking=no ./deploy-k8s.yaml $SSH_USER@$REMOTE_HOST:/home/$SSH_USER
+          set -ex
+          sshpass -p $SSH_PASSWORD scp -v -o StrictHostKeyChecking=no ./deploy-k8s.yaml $SSH_USER@$REMOTE_HOST:/home/$SSH_USER
 
       - name: SSH and apply kubernetes yaml
         env:
@@ -43,5 +44,6 @@ jobs:
           SSH_USER: ${{ secrets.SSH_USER }}
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
         run: |
-          sshpass -p $SSH_PASSWORD ssh -o StrictHostKeyChecking=no $SSH_USER@$REMOTE_HOST "kubectl apply -f /home/$SSH_USER/deploy-k8s.yaml"
+          set -ex
+          sshpass -p $SSH_PASSWORD ssh -v -o StrictHostKeyChecking=no $SSH_USER@$REMOTE_HOST "kubectl apply -f /home/$SSH_USER/deploy-k8s.yaml"
           
