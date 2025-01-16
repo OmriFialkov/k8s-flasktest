@@ -14,70 +14,33 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Use version from Build Pipeline
+      - name: set environment variables
         run: |
-          VERSION="v1.0.${{ github.event.workflow_run.run_number }}"
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Version to deploy: $VERSION"
-      
-      - name: Deploy to EC2
-        env:
-          VERSION: ${{ env.VERSION }}
-        run: |
-          if [ -z "${{ env.VERSION }}" ]; then
-            echo "ERROR: VERSION is not set correctly!"
-            exit 1
-          fi
-          
-          echo "Deploying version $VERSION"
-          
-          # Save the SSH key to a file
-          echo "${{ secrets.EC2_KEY }}" > key.pem
-          chmod 600 key.pem
-          
-          # Ensure key file is removed even if the script fails
-          trap "rm -f key.pem" EXIT
+          echo "IMAGE_TAG=0.0.${{ github.run_number }}" >> $GITHUB_ENV
+          echo "checking image tag, is: ${{env.IMAGE_TAG}}"
 
-          ssh -i key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
-            set -e  # Exit immediately if any command fails
-            
-            # Update OS and install Docker
-            export PATH=\$PATH:/usr/sbin:/usr/bin:/sbin:/bin && \
-            if [ -f /etc/debian_version ] || [ -f /etc/lsb-release ]; then \
-              sudo apt-get update && sudo apt-get install -y docker.io; \
-            elif [ -f /etc/redhat-release ]; then \
-              sudo yum update -y && sudo yum install -y docker; \
-            elif [ -f /etc/system-release ] && grep -q 'Amazon Linux' /etc/system-release; then \
-              sudo yum update -y && sudo yum install -y docker; \
-            else \
-              echo 'Unsupported OS'; exit 1; \
-            fi && \
-            
-            # Start Docker and ensure the user can run it
-            sudo systemctl start docker && \
-            sudo usermod -aG docker \$USER && newgrp docker && \
-            docker --version && \
-            
-            # Stop and remove any container using port 5000
-            EXISTING_CONTAINER=\$(sudo docker ps -q -f 'publish=5000'); \
-            if [ -n \"\$EXISTING_CONTAINER\" ]; then \
-              echo 'Stopping and removing existing container using port 5000...'; \
-              sudo docker stop \$EXISTING_CONTAINER && sudo docker rm \$EXISTING_CONTAINER; \
-            fi && \
-            
-            # Remove existing image and pull the correct version
-            if docker images nutzkiller/weather-app:${{ env.VERSION }} -q | grep -q .; then \
-              echo 'Removing existing image...'; \
-              docker rmi nutzkiller/weather-app:${{ env.VERSION }}; \
-            fi && \
-            docker pull nutzkiller/weather-app:${{ env.VERSION }} && \
-            
-            # Run the new Docker container
-            docker run -d -p 5000:5000 nutzkiller/weather-app:${{ env.VERSION }} && \
-            echo 'Deployment successful!' && \
-            docker ps"
-      - name: Curl Test
+      - name: Modify deploy-k8s.yaml file to use new image tag
         run: |
-          sleep 5
-          echo "Testing the deployed application using curl..."
-          curl -sSf http://${{ secrets.EC2_HOST }}:5000 || { echo 'Curl test failed!'; exit 1; }
+          sed -i "s|image: crazyguy888/k8s-flasktest:.*|image: crazyguy888/k8s-flasktest:${{env.IMAGE_TAG}}|" deploy-k8s.yaml
+
+      - name: install sshpass
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass
+
+      - name: SCP yaml to remote machine using sshpass
+        env:
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+        run: | 
+          sshpass -p $SSH_PASSWORD scp -o StrictHostKeyChecking=no ./deploy-k8s.yaml $SSH_USER@$REMOTE_HOST:/home/$SSH_USER
+
+      - name: SSH and apply kubernetes yaml
+        env:
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+        run: |
+          sshpass -p $SSH_PASSWORD ssh -o StrictHostKeyChecking=no $SSH_USER@$REMOTE_HOST "kubectl apply -f /home/$SSH_USER/deploy-k8s.yaml"
+          
