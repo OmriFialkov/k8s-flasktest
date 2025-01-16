@@ -26,7 +26,7 @@ jobs:
 
       - name: verify sshpass installed
         run: |
-          sshpass -v || echo "sshpass is not installed"; exit 1
+          sshpass -V || echo "sshpass is not installed"; exit 1
 
       - name: SCP yaml to remote machine using sshpass
         env:
